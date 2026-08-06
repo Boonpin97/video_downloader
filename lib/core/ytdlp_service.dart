@@ -118,11 +118,19 @@ class YtDlpService {
     // file rather than parsing it out of stdout keeps the progress stream clean
     // and survives the path containing pipes or newlines.
     final pathFile = File(p.join(tempDir.path, '_final_path.txt'));
+    // Only this one file is cleared before a run. yt-dlp appends to it, so a
+    // resumed download would otherwise read a stale path from an earlier
+    // attempt. The `.part` and `.ytdl` files beside it are what make resuming
+    // work and must survive.
+    if (pathFile.existsSync()) await pathFile.delete();
 
     final args = <String>[
       ..._baseArgs,
       '--newline',
       '--progress',
+      // Resume from whatever is already in the scratch directory. This is
+      // yt-dlp's default, but stating it makes the dependency explicit.
+      '--continue',
       '--progress-template', progressTemplate,
       '--ffmpeg-location', binaries.ffmpegDir,
       // Keep partial fragments inside the task's own temp directory so
@@ -189,8 +197,10 @@ class YtDlpService {
       if (lines.isNotEmpty) finalPath = lines.last;
     }
 
-    await _cleanup(tempDir);
-
+    // The scratch directory is deliberately left alone here. Whether the
+    // partial data is worth keeping depends on *why* the process ended — a
+    // pause or a network failure should be resumable, a cancel should not —
+    // and only the queue knows that. It calls [cleanupTemp] when appropriate.
     if (exitCode != 0) {
       throw _interpretFailure(stderrLines.join('\n'), exitCode);
     }
@@ -234,8 +244,9 @@ class YtDlpService {
         lower.contains('members-only') ||
         lower.contains('403')) {
       return YtDlpException(
-        'The site refused access. If the video needs an account, enable '
-        '"Use cookies from browser" in Settings and sign in there first.',
+        'The site refused access. Open the page in your browser, sign in or '
+        'clear the captcha, then export a cookies.txt and set it under Site '
+        'access in Settings.',
         log: log,
       );
     }

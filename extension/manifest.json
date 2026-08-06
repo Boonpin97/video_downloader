@@ -1,0 +1,15 @@
+{
+  "manifest_version": 3,
+  "name": "Send to Video Downloader",
+  "version": "1.0.0",
+  "description": "Sends the current page to Video Downloader along with the session cookies, so signed-in and captcha-gated videos can be downloaded.",
+  "permissions": ["cookies", "storage"],
+  "host_permissions": ["http://127.0.0.1/*", "<all_urls>"],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_title": "Send this page to Video Downloader"
+  },
+  "options_page": "options.html"
+}

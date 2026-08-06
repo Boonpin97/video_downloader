@@ -1,9 +1,15 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import 'package:window_manager/window_manager.dart';
 
+import '../core/link_server.dart';
 import '../core/ytdlp_service.dart';
+import '../models/download_options.dart';
 import '../models/download_task.dart';
+import '../state/bridge_controller.dart';
 import '../state/queue_controller.dart';
 import '../state/settings_controller.dart';
 import 'format_picker_dialog.dart';
@@ -20,24 +26,55 @@ class HomePage extends StatefulWidget {
 class _HomePageState extends State<HomePage> {
   final _urlController = TextEditingController();
   final _urlFocus = FocusNode();
+  StreamSubscription<IncomingLink>? _linkSubscription;
   bool _probing = false;
 
   @override
+  void initState() {
+    super.initState();
+    _linkSubscription = context.read<BridgeController>().links.listen(_onLink);
+  }
+
+  @override
   void dispose() {
+    unawaited(_linkSubscription?.cancel());
     _urlController.dispose();
     _urlFocus.dispose();
     super.dispose();
   }
 
+  /// Handles a link pushed over from the browser extension.
+  ///
+  /// The window is raised first: the user clicked the button in their browser
+  /// and the quality picker is about to appear, so a dialog opening behind the
+  /// browser would look like nothing happened.
+  Future<void> _onLink(IncomingLink link) async {
+    if (_probing) {
+      _notify('Still checking the last link — try that one again in a moment.');
+      return;
+    }
+    _urlController.text = link.url;
+    await windowManager.show();
+    await windowManager.focus();
+    if (!mounted) return;
+    await _fetch(link: link);
+  }
+
   /// Resolve the URL, let the user pick a quality, then queue it.
-  Future<void> _fetch() async {
-    final url = _urlController.text.trim();
+  ///
+  /// [link] carries the session captured by the extension, which overrides the
+  /// cookie settings for this one download — the browser's live cookies beat
+  /// whatever jar was configured globally.
+  Future<void> _fetch({IncomingLink? link}) async {
+    final url = (link?.url ?? _urlController.text).trim();
     if (url.isEmpty || _probing) return;
 
     final settings = context.read<SettingsController>();
     final service = context.read<YtDlpService>();
     final queue = context.read<QueueController>();
-    final options = settings.options;
+    final options = link == null
+        ? settings.options
+        : _optionsForLink(settings.options, link);
 
     setState(() => _probing = true);
     try {
@@ -52,15 +89,16 @@ class _HomePageState extends State<HomePage> {
         if (choice == null) return; // user cancelled
       }
 
-      queue.add(
+      final selector = DownloadTask.buildSelector(
+        choice.format,
+        audioOnly: options.audioOnly,
+      );
+      final result = queue.add(
         DownloadTask(
-          id: DateTime.now().microsecondsSinceEpoch.toString(),
+          id: DownloadTask.deriveId(url, selector),
           url: url,
-          info: info,
-          formatSelector: DownloadTask.buildSelector(
-            choice.format,
-            audioOnly: options.audioOnly,
-          ),
+          title: info.title,
+          formatSelector: selector,
           formatLabel: options.audioOnly
               ? 'Audio only · ${options.audioFormat}'
               : choice.label,
@@ -68,6 +106,17 @@ class _HomePageState extends State<HomePage> {
           outputDir: settings.outputDir,
         ),
       );
+
+      if (mounted) {
+        switch (result) {
+          case AddResult.alreadyRunning:
+            _notify('That video is already in the queue.');
+          case AddResult.resumedExisting:
+            _notify('Already downloaded once — resuming that entry.');
+          case AddResult.added:
+            break;
+        }
+      }
       _urlController.clear();
       _urlFocus.requestFocus();
     } on YtDlpException catch (e) {
@@ -77,6 +126,25 @@ class _HomePageState extends State<HomePage> {
     } finally {
       if (mounted) setState(() => _probing = false);
     }
+  }
+
+  /// Layers the extension's session over the configured options.
+  ///
+  /// Each field only overrides when the extension actually supplied it, so a
+  /// send from a site with no cookies still inherits whatever the user set up
+  /// in Settings instead of silently dropping it.
+  DownloadOptions _optionsForLink(DownloadOptions base, IncomingLink link) {
+    return base.copyWith(
+      cookiesFile: link.cookiesFile == null ? null : () => link.cookiesFile,
+      userAgent: link.userAgent == null ? null : () => link.userAgent,
+      referer: link.referer == null ? null : () => link.referer,
+    );
+  }
+
+  void _notify(String message) {
+    ScaffoldMessenger.of(context)
+      ..clearSnackBars()
+      ..showSnackBar(SnackBar(content: Text(message)));
   }
 
   void _showError(YtDlpException e) {
@@ -148,9 +216,7 @@ class _HomePageState extends State<HomePage> {
           IconButton(
             tooltip: 'Settings',
             icon: const Icon(Icons.settings_outlined),
-            onPressed: () => Navigator.of(context).push(
-              MaterialPageRoute<void>(builder: (_) => const SettingsPage()),
-            ),
+            onPressed: () => openSettings(context),
           ),
           const SizedBox(width: 8),
         ],

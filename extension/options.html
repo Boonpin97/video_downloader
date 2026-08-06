@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Send to Video Downloader</title>
+    <style>
+      body {
+        font: 14px/1.5 system-ui, sans-serif;
+        margin: 24px;
+        max-width: 34rem;
+        color: #1c1b1f;
+      }
+      h1 { font-size: 1.15rem; margin: 0 0 4px; }
+      p.lede { color: #49454f; margin: 0 0 24px; }
+      label { display: block; font-weight: 600; margin-bottom: 4px; }
+      input {
+        width: 100%;
+        padding: 8px;
+        font: inherit;
+        border: 1px solid #79747e;
+        border-radius: 4px;
+        box-sizing: border-box;
+      }
+      .field { margin-bottom: 18px; }
+      .row { display: flex; gap: 8px; align-items: center; }
+      button {
+        font: inherit;
+        padding: 8px 16px;
+        border: 0;
+        border-radius: 20px;
+        background: #3f6fe0;
+        color: #fff;
+        cursor: pointer;
+      }
+      button.secondary { background: #e8e0eb; color: #1c1b1f; }
+      #status { margin-left: 4px; }
+      .ok { color: #2e7d32; }
+      .bad { color: #c62828; }
+      @media (prefers-color-scheme: dark) {
+        body { background: #1c1b1f; color: #e6e1e5; }
+        p.lede { color: #cac4d0; }
+        input { background: #2b2930; color: #e6e1e5; border-color: #938f99; }
+        button.secondary { background: #36343b; color: #e6e1e5; }
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Send to Video Downloader</h1>
+    <p class="lede">
+      Turn on <em>Accept links from the browser extension</em> in the app's
+      Settings, then copy its pairing key here.
+    </p>
+
+    <div class="field">
+      <label for="token">Pairing key</label>
+      <input id="token" type="text" spellcheck="false" placeholder="Paste from the app's Settings" />
+    </div>
+
+    <div class="field">
+      <label for="port">Port</label>
+      <input id="port" type="number" min="1" max="65535" />
+    </div>
+
+    <div class="row">
+      <button id="save">Save</button>
+      <button id="test" class="secondary">Test connection</button>
+      <span id="status"></span>
+    </div>
+
+    <script src="options.js"></script>
+  </body>
+</html>

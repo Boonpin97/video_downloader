@@ -93,9 +93,27 @@ class TaskTile extends StatelessWidget {
       case TaskState.merging:
         return [
           IconButton(
-            tooltip: 'Cancel',
+            tooltip: 'Pause — keeps what has downloaded so far',
+            icon: const Icon(Icons.pause),
+            onPressed: () => queue.pause(task),
+          ),
+          IconButton(
+            tooltip: 'Cancel and discard',
             icon: const Icon(Icons.close),
             onPressed: () => queue.cancel(task),
+          ),
+        ];
+      case TaskState.paused:
+        return [
+          IconButton(
+            tooltip: 'Resume',
+            icon: const Icon(Icons.play_arrow),
+            onPressed: () => queue.resume(task),
+          ),
+          IconButton(
+            tooltip: 'Remove and discard the partial file',
+            icon: const Icon(Icons.clear),
+            onPressed: () => queue.remove(task),
           ),
         ];
       case TaskState.completed:
@@ -119,7 +137,7 @@ class TaskTile extends StatelessWidget {
           IconButton(
             tooltip: 'Retry',
             icon: const Icon(Icons.refresh),
-            onPressed: () => queue.retry(task),
+            onPressed: () => queue.resume(task),
           ),
           IconButton(
             tooltip: 'Remove from list',
@@ -185,6 +203,11 @@ class TaskTile extends StatelessWidget {
     switch (task.state) {
       case TaskState.queued:
         return 'Waiting…';
+      case TaskState.paused:
+        final done = formatBytes(task.downloadedBytes);
+        return task.downloadedBytes > 0
+            ? 'Paused · $done kept — resuming continues from here'
+            : 'Paused';
       case TaskState.merging:
         // The byte transfer is done but ffmpeg is still working. Saying so
         // explicitly avoids a bar that looks stuck at 100%.
@@ -232,6 +255,7 @@ class _StateChip extends StatelessWidget {
       TaskState.queued => ('Queued', scheme.onSurfaceVariant),
       TaskState.downloading => ('Downloading', scheme.primary),
       TaskState.merging => ('Merging', scheme.tertiary),
+      TaskState.paused => ('Paused', scheme.secondary),
       TaskState.completed => ('Done', Colors.green.shade700),
       TaskState.failed => ('Failed', scheme.error),
       TaskState.cancelled => ('Cancelled', scheme.onSurfaceVariant),

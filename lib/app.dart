@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import 'core/binaries.dart';
 import 'core/ytdlp_service.dart';
+import 'state/bridge_controller.dart';
 import 'state/queue_controller.dart';
 import 'state/settings_controller.dart';
 import 'ui/first_run_page.dart';
@@ -45,6 +46,7 @@ class _BinaryGate extends StatefulWidget {
 
 class _BinaryGateState extends State<_BinaryGate> {
   final _manager = BinaryManager();
+  final _bridge = BridgeController();
   BinarySet? _binaries;
   bool _checking = true;
 
@@ -52,6 +54,24 @@ class _BinaryGateState extends State<_BinaryGate> {
   void initState() {
     super.initState();
     _check();
+    _startBridgeIfEnabled();
+  }
+
+  @override
+  void dispose() {
+    _bridge.dispose();
+    super.dispose();
+  }
+
+  /// Restores the listener across launches, so a user who turned the bridge on
+  /// once does not have to revisit Settings every time they open the app.
+  Future<void> _startBridgeIfEnabled() async {
+    final settings = context.read<SettingsController>();
+    if (!settings.bridgeEnabled) return;
+    await _bridge.apply(
+      enabled: true,
+      token: await settings.ensureBridgeToken(),
+    );
   }
 
   Future<void> _check() async {
@@ -89,11 +109,14 @@ class _BinaryGateState extends State<_BinaryGate> {
     return MultiProvider(
       providers: [
         Provider<YtDlpService>.value(value: service),
+        ChangeNotifierProvider<BridgeController>.value(value: _bridge),
         ChangeNotifierProvider(
+          // Reload any queue left over from a previous session. Anything that
+          // was mid-download comes back paused, ready to resume.
           create: (_) => QueueController(
             service,
             maxConcurrent: settings.maxConcurrent,
-          ),
+          )..restore(),
         ),
       ],
       child: const HomePage(),
